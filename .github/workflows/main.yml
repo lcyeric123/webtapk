@@ -35,15 +35,14 @@ jobs:
           cd project
           cordova platform add android@13.0.0
 
-      - name: Generate MainActivity.java
-        env:
-          URL: ${{ github.event.inputs.homepage_url }}
-          pkg: ${{ github.event.inputs.package_id }}
+      - name: Build MainActivity.java file
         run: |
+          URL="${{ github.event.inputs.homepage_url }}"
+          pkg="${{ github.event.inputs.package_id }}"
           pkg_path=$(echo "$pkg" | sed 's/\./\//g')
           mkdir -p project/platforms/android/app/src/main/java/"$pkg_path"
-          cat > MainActivity.tpl << EOF
-package __PKG__;
+          cat > project/platforms/android/app/src/main/java/"$pkg_path"/MainActivity.java << 'EOF'
+package vip.setv.free;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -62,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowFileAccess(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUserAgentString("Mozilla/5.0 (Android; Mobile) AppleWebKit Chrome Mobile Safari");
-        webView.loadUrl("__URL__");
+        webView.loadUrl("https://tv.ericse.dpdns.org/");
         setContentView(webView);
     }
     @Override
@@ -75,9 +74,6 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 EOF
-          sed -i "s|__PKG__|$pkg|g" MainActivity.tpl
-          sed -i "s|__URL__|$URL|g" MainActivity.tpl
-          mv MainActivity.tpl project/platforms/android/app/src/main/java/"$pkg_path"/MainActivity.java
 
       - name: Build release‑unsigned APK
         run: |
@@ -87,5 +83,5 @@ EOF
       - name: Upload APK to Action Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: setv‑app‑unsigned
+          name: setv-app-unsigned
           path: project/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
