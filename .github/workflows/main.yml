@@ -45,8 +45,8 @@ jobs:
 
       # 生成原生 WebView 的 MainActivity.java
       - name: Generate MainActivity.java
-        working-directory: app
         run: |
+          cd app
           # 确定 MainActivity 所在的包路径
           PKG_PATH=$(echo "${{ github.event.inputs.package_id }}" | tr '.' '/')
           MAIN_ACTIVITY_DIR="platforms/android/app/src/main/java/${PKG_PATH}"
@@ -116,8 +116,8 @@ jobs:
 
       # 编译 Release APK（未签名）
       - name: Build release APK
-        working-directory: app/platforms/android
         run: |
+          cd app/platforms/android
           # 确保 gradlew 有执行权限
           chmod +x gradlew
           ./gradlew assembleRelease
