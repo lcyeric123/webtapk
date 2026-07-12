@@ -48,8 +48,28 @@ jobs:
           # 下载 Gradle 8.7
           wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
           unzip -q gradle-8.7-bin.zip
-          # 使用 Gradle 8.7 生成 wrapper
-          ./gradle-8.7/bin/gradle wrapper --gradle-version 8.7
+          # 手动创建 gradle-wrapper.properties 文件
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          # 下载 Gradle Wrapper JAR
+          wget -q https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -O gradle/wrapper/gradle-wrapper.jar
+          # 生成 gradlew 脚本
+          cat > gradlew << 'GRADLEWEOF'
+          #!/bin/sh
+          # Gradle start up script
+          APP_HOME=$(cd "`dirname "$0"`" && pwd)
+          CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+          exec java -cp "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
+          GRADLEWEOF
+          chmod +x gradlew
           # 确认 gradlew 已生成
           ls -la gradlew
 
