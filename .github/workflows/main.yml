@@ -25,7 +25,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk git
+          sudo apt-get install -y openjdk-17-jdk git unzip
 
       # 配置 Node.js 22 并全局安装 Cordova
       - name: Setup Node.js and install Cordova
@@ -41,12 +41,15 @@ jobs:
           cd app
           cordova platform add android@13.0.0
 
-      # 生成 Gradle Wrapper（使用与 AGP 8.3.0 兼容的 Gradle 8.7）
-      - name: Setup Gradle Wrapper
+      # 下载并配置 Gradle 8.7
+      - name: Setup Gradle 8.7
         run: |
           cd app/platforms/android
-          # 生成 Gradle Wrapper，指定兼容的 Gradle 版本
-          gradle wrapper --gradle-version 8.7
+          # 下载 Gradle 8.7
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip
+          # 使用 Gradle 8.7 生成 wrapper
+          ./gradle-8.7/bin/gradle wrapper --gradle-version 8.7
           # 确认 gradlew 已生成
           ls -la gradlew
 
