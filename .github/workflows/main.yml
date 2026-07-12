@@ -40,6 +40,8 @@ jobs:
           cordova create app "${{ github.event.inputs.package_id }}" "${{ github.event.inputs.app_name }}"
           cd app
           cordova platform add android@13.0.0
+          # 确保 gradlew 有执行权限
+          chmod +x gradlew
 
       # 生成原生 WebView 的 MainActivity.java
       - name: Generate MainActivity.java
@@ -115,7 +117,12 @@ jobs:
       # 编译 Release APK（未签名）
       - name: Build release APK
         working-directory: app
-        run: ./gradlew assembleRelease
+        run: |
+          # 再次确保 gradlew 有执行权限
+          chmod +x gradlew
+          # 检查 gradlew 是否存在
+          ls -la gradlew
+          ./gradlew assembleRelease
 
       # 上传 APK 到 Actions Artifacts
       - name: Upload APK artifact
