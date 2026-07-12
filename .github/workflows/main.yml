@@ -1,19 +1,17 @@
-name: Build WebView APK and Publish to Release
+name: Build WebView APK
 on:
   workflow_dispatch:
     inputs:
       homepage_url:
-        description: "https://tv.ericse.dpdns.org/"
+        description: "HTTPS网页地址"
         required: true
+        default: "https://tv.ericse.dpdns.org/"
       app_name:
         description: "APP名称"
         default: "SEtv"
       package_id:
         description: "安卓包名(小写)"
         default: "vip.setv.free"
-
-permissions:
-  contents: write
 
 jobs:
   build-apk:
@@ -22,30 +20,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies JDK‑17, Gradle
+      - name: Install JDK‑17 and Gradle
         run: sudo apt -y update && sudo apt -y install openjdk-17-jdk gradle git
 
-      - name: Setup Node & install cordova
+      - name: Setup Node.js and install Cordova
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install -g cordova
 
-      - name: Create Cordova Project
+      - name: Create Cordova project
         run: |
           cordova create project ${{ github.event.inputs.package_id }} ${{ github.event.inputs.app_name }}
           cd project
           cordova platform add android@13.0.0
 
-      - name: Write MainActivity.java
+      - name: Generate MainActivity.java
         env:
           URL: ${{ github.event.inputs.homepage_url }}
           pkg: ${{ github.event.inputs.package_id }}
         run: |
-          pkg_path=$(echo $pkg | sed 's/\./\//g')
-          mkdir -p project/platforms/android/app/src/main/java/$pkg_path
-          cat > project/platforms/android/app/src/main/java/$pkg_path/MainActivity.java <<'EOF'
-package ${pkg};
+          pkg_path=$(echo "$pkg" | sed 's/\./\//g')
+          mkdir -p project/platforms/android/app/src/main/java/"$pkg_path"
+          cat > MainActivity.tpl << EOF
+package __PKG__;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -64,7 +62,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowFileAccess(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUserAgentString("Mozilla/5.0 (Android; Mobile) AppleWebKit Chrome Mobile Safari");
-        webView.loadUrl("${URL}");
+        webView.loadUrl("__URL__");
         setContentView(webView);
     }
     @Override
@@ -77,29 +75,17 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 EOF
+          sed -i "s|__PKG__|$pkg|g" MainActivity.tpl
+          sed -i "s|__URL__|$URL|g" MainActivity.tpl
+          mv MainActivity.tpl project/platforms/android/app/src/main/java/"$pkg_path"/MainActivity.java
 
-      - name: Compile Release APK
+      - name: Build release‑unsigned APK
         run: |
           cd project/platforms/android
           ./gradlew assembleRelease
 
-      - name: Set version tag
-        id: vars
-        run: echo "VERSION=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
-
-      - name: Create GitHub Release and upload APK
-        uses: softprops/action-gh-release@v2
+      - name: Upload APK to Action Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ env.VERSION }}
-          name: Build‑${{ env.VERSION }}
-          files:
-            - project/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
-          body: |
-            WebView打包产物
-            起始地址：${{ github.event.inputs.homepage_url }}
-            特性：
-            - 完整localStorage、Cookie、Indexed‑DB持久化
-            - 返回按键等同于浏览器后退
-            - 支持页面自由跳转
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: setv‑app‑unsigned
+          path: project/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
