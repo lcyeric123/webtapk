@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 安装系统依赖：JDK 17、Gradle、Git
+      # 安装系统依赖：JDK 17、Git
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk gradle git
+          sudo apt-get install -y openjdk-17-jdk git
 
       # 配置 Node.js 22 并全局安装 Cordova
       - name: Setup Node.js and install Cordova
@@ -40,6 +40,15 @@ jobs:
           cordova create app "${{ github.event.inputs.package_id }}" "${{ github.event.inputs.app_name }}"
           cd app
           cordova platform add android@13.0.0
+
+      # 生成 Gradle Wrapper（使用与 AGP 8.3.0 兼容的 Gradle 8.7）
+      - name: Setup Gradle Wrapper
+        run: |
+          cd app/platforms/android
+          # 生成 Gradle Wrapper，指定兼容的 Gradle 版本
+          gradle wrapper --gradle-version 8.7
+          # 确认 gradlew 已生成
+          ls -la gradlew
 
       # 生成原生 WebView 的 MainActivity.java
       - name: Generate MainActivity.java
@@ -116,8 +125,8 @@ jobs:
       - name: Build release APK
         run: |
           cd app/platforms/android
-          # 使用系统安装的 gradle 进行构建
-          gradle assembleRelease
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
       # 上传 APK 到 Actions Artifacts
       - name: Upload APK artifact
