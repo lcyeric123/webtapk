@@ -1,87 +1,125 @@
-name: Build WebView APK
+name: Build Android APK
+
 on:
   workflow_dispatch:
     inputs:
       homepage_url:
-        description: "HTTPS网页地址"
+        description: 'Homepage URL to load in WebView'
         required: true
-        default: "https://tv.ericse.dpdns.org/"
+        default: 'https://tv.ericse.dpdns.org/'
       app_name:
-        description: "APP名称"
-        default: "SEtv"
+        description: 'Application display name'
+        required: true
+        default: 'SEtv'
       package_id:
-        description: "安卓包名(小写)"
-        default: "vip.setv.free"
+        description: 'Application package ID'
+        required: true
+        default: 'vip.setv.free'
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # 安装系统依赖：JDK 17、Gradle、Git
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk gradle git
 
-      - name: Install JDK‑17 and Gradle
-        run: sudo apt -y update && sudo apt -y install openjdk-17-jdk gradle git
-
+      # 配置 Node.js 22 并全局安装 Cordova
       - name: Setup Node.js and install Cordova
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install -g cordova
 
-      - name: Create Cordova project
+      # 创建 Cordova 项目并添加 Android 平台
+      - name: Create Cordova project and add Android platform
         run: |
-          cordova create project ${{ github.event.inputs.package_id }} ${{ github.event.inputs.app_name }}
-          cd project
+          cordova create app "${{ github.event.inputs.package_id }}" "${{ github.event.inputs.app_name }}"
+          cd app
           cordova platform add android@13.0.0
 
-      - name: Build MainActivity.java file
+      # 生成原生 WebView 的 MainActivity.java
+      - name: Generate MainActivity.java
+        working-directory: app
         run: |
-          URL="${{ github.event.inputs.homepage_url }}"
-          pkg="${{ github.event.inputs.package_id }}"
-          pkg_path=$(echo "$pkg" | sed 's/\./\//g')
-          mkdir -p project/platforms/android/app/src/main/java/"$pkg_path"
-          cat > project/platforms/android/app/src/main/java/"$pkg_path"/MainActivity.java << 'EOF'
-package vip.setv.free;
-import android.os.Bundle;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import androidx.appcompat.app.AppCompatActivity;
+          # 确定 MainActivity 所在的包路径
+          PKG_PATH=$(echo "${{ github.event.inputs.package_id }}" | tr '.' '/')
+          MAIN_ACTIVITY_DIR="platforms/android/app/src/main/java/${PKG_PATH}"
+          mkdir -p "${MAIN_ACTIVITY_DIR}"
 
-public class MainActivity extends AppCompatActivity {
-    private WebView webView;
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        webView = new WebView(this);
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString("Mozilla/5.0 (Android; Mobile) AppleWebKit Chrome Mobile Safari");
-        webView.loadUrl("https://tv.ericse.dpdns.org/");
-        setContentView(webView);
-    }
-    @Override
-    public void onBackPressed() {
-        if(webView.canGoBack()){
-            webView.goBack();
-        }else{
-            super.onBackPressed();
-        }
-    }
-}
-EOF
+          # 将 homepage_url 赋值给变量，避免 YAML 多行解析冲突
+          HOMEPAGE_URL='${{ github.event.inputs.homepage_url }}'
+          PACKAGE_ID='${{ github.event.inputs.package_id }}'
 
-      - name: Build release‑unsigned APK
-        run: |
-          cd project/platforms/android
-          ./gradlew assembleRelease
+          cat > "${MAIN_ACTIVITY_DIR}/MainActivity.java" << 'JAVAEOF'
+          package PACKAGE_PLACEHOLDER;
 
-      - name: Upload APK to Action Artifacts
+          import android.os.Bundle;
+          import android.view.KeyEvent;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebSettings;
+          import android.webkit.CookieManager;
+          import androidx.appcompat.app.AppCompatActivity;
+
+          public class MainActivity extends AppCompatActivity {
+              private WebView webView;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  webView = new WebView(this);
+                  setContentView(webView);
+
+                  // 配置 WebView 设置
+                  WebSettings webSettings = webView.getSettings();
+                  webSettings.setJavaScriptEnabled(true);
+                  webSettings.setDomStorageEnabled(true);
+                  webSettings.setDatabaseEnabled(true);
+                  webSettings.setAllowFileAccess(false);
+                  // 启用持久化存储（localStorage、IndexedDB）
+                  webSettings.setDatabasePath(getApplicationContext().getDir("database", MODE_PRIVATE).getPath());
+
+                  // 启用 Cookie
+                  CookieManager cookieManager = CookieManager.getInstance();
+                  cookieManager.setAcceptCookie(true);
+                  cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+                  // 让网页内链接在当前 WebView 中跳转，不打开外部浏览器
+                  webView.setWebViewClient(new WebViewClient());
+
+                  // 加载目标网址
+                  webView.loadUrl("URL_PLACEHOLDER");
+              }
+
+              // 处理返回按键：如果可以回退就回退，否则退出应用
+              @Override
+              public boolean onKeyDown(int keyCode, KeyEvent event) {
+                  if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
+                      webView.goBack();
+                      return true;
+                  }
+                  return super.onKeyDown(keyCode, event);
+              }
+          }
+          JAVAEOF
+
+          # 替换占位符为实际值
+          sed -i "s/PACKAGE_PLACEHOLDER/${PACKAGE_ID}/g" "${MAIN_ACTIVITY_DIR}/MainActivity.java"
+          sed -i "s|URL_PLACEHOLDER|${HOMEPAGE_URL}|g" "${MAIN_ACTIVITY_DIR}/MainActivity.java"
+
+      # 编译 Release APK（未签名）
+      - name: Build release APK
+        working-directory: app
+        run: ./gradlew assembleRelease
+
+      # 上传 APK 到 Actions Artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: setv-app-unsigned
-          path: project/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: app-release-unsigned
+          path: app/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
