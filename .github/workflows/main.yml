@@ -6,7 +6,7 @@ on:
         description: "https://tv.ericse.dpdns.org/"
         required: true
       app_name:
-        description: "SEtv"
+        description: "APP名称"
         default: "SEtv"
       package_id:
         description: "安卓包名(小写)"
@@ -23,15 +23,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install dependencies JDK‑17, Gradle
-        run: |
-          sudo apt -y update
-          sudo apt -y install openjdk-17-jdk gradle git
+        run: sudo apt -y update && sudo apt -y install openjdk-17-jdk gradle git
 
       - name: Setup Node & install cordova
         uses: actions/setup-node@v4
         with:
           node-version: 22
-        run: npm install -g cordova
+      - run: npm install -g cordova
 
       - name: Create Cordova Project
         run: |
@@ -39,47 +37,46 @@ jobs:
           cd project
           cordova platform add android@13.0.0
 
-      - name: Write MainActivity.java（开启LocalStorage，Cookie，IndexedDB）
+      - name: Write MainActivity.java
+        env:
+          URL: ${{ github.event.inputs.homepage_url }}
+          pkg: ${{ github.event.inputs.package_id }}
         run: |
-          URL=${{ github.event.inputs.homepage_url }}
-          pkg=${{ github.event.inputs.package_id }}
           pkg_path=$(echo $pkg | sed 's/\./\//g')
           mkdir -p project/platforms/android/app/src/main/java/$pkg_path
-          cat > project/platforms/android/app/src/main/java/$pkg_path/MainActivity.java << EOF
-          package $pkg;
-          import android.os.Bundle;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import androidx.appcompat.app.AppCompatActivity;
+          cat > project/platforms/android/app/src/main/java/$pkg_path/MainActivity.java <<'EOF'
+package ${pkg};
+import android.os.Bundle;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import androidx.appcompat.app.AppCompatActivity;
 
-          public class MainActivity extends AppCompatActivity {
-              private WebView webView;
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  webView = new WebView(this);
-                  WebSettings settings = webView.getSettings();
-                  settings.setJavaScriptEnabled(true);
-                  // 开启本地存储 localStorage / IndexedDB / Cookie
-                  settings.setDomStorageEnabled(true);
-                  settings.setDatabaseEnabled(true);
-                  settings.setAllowFileAccess(true);
-                  settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-                  settings.setUserAgentString("Mozilla/5.0 (Android; Mobile) AppleWebKit Chrome Mobile Safari");
-                  webView.loadUrl("$URL");
-                  setContentView(webView);
-              }
-              // 返回键：网页历史后退，没有页面就退出APP
-              @Override
-              public void onBackPressed() {
-                  if(webView.canGoBack()){
-                      webView.goBack();
-                  }else{
-                      super.onBackPressed();
-                  }
-              }
-          }
-          EOF
+public class MainActivity extends AppCompatActivity {
+    private WebView webView;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        webView = new WebView(this);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setUserAgentString("Mozilla/5.0 (Android; Mobile) AppleWebKit Chrome Mobile Safari");
+        webView.loadUrl("${URL}");
+        setContentView(webView);
+    }
+    @Override
+    public void onBackPressed() {
+        if(webView.canGoBack()){
+            webView.goBack();
+        }else{
+            super.onBackPressed();
+        }
+    }
+}
+EOF
 
       - name: Compile Release APK
         run: |
