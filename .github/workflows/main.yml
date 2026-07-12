@@ -1,0 +1,108 @@
+name: Build WebView APK and Publish to Release
+on:
+  workflow_dispatch:
+    inputs:
+      homepage_url:
+        description: "https://tv.ericse.dpdns.org/"
+        required: true
+      app_name:
+        description: "SEtv"
+        default: "SEtv"
+      package_id:
+        description: "安卓包名(小写)"
+        default: "vip.setv.free"
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies JDK‑17, Gradle
+        run: |
+          sudo apt -y update
+          sudo apt -y install openjdk-17-jdk gradle git
+
+      - name: Setup Node & install cordova
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+        run: npm install -g cordova
+
+      - name: Create Cordova Project
+        run: |
+          cordova create project ${{ github.event.inputs.package_id }} ${{ github.event.inputs.app_name }}
+          cd project
+          cordova platform add android@13.0.0
+
+      - name: Write MainActivity.java（开启LocalStorage，Cookie，IndexedDB）
+        run: |
+          URL=${{ github.event.inputs.homepage_url }}
+          pkg=${{ github.event.inputs.package_id }}
+          pkg_path=$(echo $pkg | sed 's/\./\//g')
+          mkdir -p project/platforms/android/app/src/main/java/$pkg_path
+          cat > project/platforms/android/app/src/main/java/$pkg_path/MainActivity.java << EOF
+          package $pkg;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import androidx.appcompat.app.AppCompatActivity;
+
+          public class MainActivity extends AppCompatActivity {
+              private WebView webView;
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  webView = new WebView(this);
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  // 开启本地存储 localStorage / IndexedDB / Cookie
+                  settings.setDomStorageEnabled(true);
+                  settings.setDatabaseEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+                  settings.setUserAgentString("Mozilla/5.0 (Android; Mobile) AppleWebKit Chrome Mobile Safari");
+                  webView.loadUrl("$URL");
+                  setContentView(webView);
+              }
+              // 返回键：网页历史后退，没有页面就退出APP
+              @Override
+              public void onBackPressed() {
+                  if(webView.canGoBack()){
+                      webView.goBack();
+                  }else{
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+      - name: Compile Release APK
+        run: |
+          cd project/platforms/android
+          ./gradlew assembleRelease
+
+      - name: Set version tag
+        id: vars
+        run: echo "VERSION=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
+
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Build‑${{ env.VERSION }}
+          files:
+            - project/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          body: |
+            WebView打包产物
+            起始地址：${{ github.event.inputs.homepage_url }}
+            特性：
+            - 完整localStorage、Cookie、Indexed‑DB持久化
+            - 返回按键等同于浏览器后退
+            - 支持页面自由跳转
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
